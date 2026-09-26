@@ -1,0 +1,12 @@
+{
+  "name": "proofgrid-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev:web": "pnpm --filter @proofgrid/web dev",
+    "build:web": "pnpm --filter @proofgrid/web build",
+    "lint:web": "pnpm --filter @proofgrid/web lint",
+    "typecheck:web": "pnpm --filter @proofgrid/web typecheck",
+    "test:web": "pnpm --filter @proofgrid/web test"
+  }
+}

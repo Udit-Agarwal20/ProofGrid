@@ -1,0 +1,16 @@
+{
+  "version": "1.0",
+  "require_evidence_anchor": true,
+  "minimum_independent_sources": 2,
+  "prefer_first_party": true,
+  "allow_secondary_sources": true,
+  "allow_single_source_output": true,
+  "preserve_conflicts": true,
+  "strict_required_fields": false,
+  "max_source_age_days": 365,
+  "max_pages": 60,
+  "max_browser_pages": 5,
+  "max_llm_calls": 80,
+  "max_run_seconds": 180,
+  "max_estimated_cost_usd": "3.00"
+}

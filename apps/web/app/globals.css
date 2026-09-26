@@ -1,0 +1,44 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Core Forensic Ledger Canvas & Surfaces */
+  --canvas: #F4F1EA;
+  --paper: #FBF9F4;
+  --surface: #FFFDF8;
+  --surface-muted: #ECE8DE;
+
+  /* Typography / Ink */
+  --ink: #151A17;
+  --ink-muted: #5E645F;
+
+  /* Structural Hairlines & Borders */
+  --border: #D8D4C8;
+  --grid: #E8E3D8;
+
+  /* Accent - Copper for active proof / focus */
+  --copper: #B85732;
+  --copper-accent: #B85732;
+
+  /* Interactive Links */
+  --link: #2F5E8E;
+
+  /* Trust Status Grammar */
+  --trust-verified: #2C624B;
+  --trust-supported: #246B68;
+  --trust-single-source: #3E568F;
+  --trust-conflicting: #8A4D08;
+  --trust-needs-review: #6B477F;
+  --trust-missing: #6A716C;
+}
+
+body {
+  background-color: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-plex-sans), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}

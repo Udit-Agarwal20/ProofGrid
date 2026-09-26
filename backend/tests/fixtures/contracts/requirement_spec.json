@@ -1,0 +1,78 @@
+{
+  "version": "1.0",
+  "entity_type": "company",
+  "goal": "Find Indian AI startups that raised more than $1M in the last 12 months",
+  "fields": [
+    {
+      "key": "company_name",
+      "label": "Company Name",
+      "data_type": "text",
+      "required": true,
+      "origin": "user",
+      "description": "Legal or brand name of the startup"
+    },
+    {
+      "key": "funding_amount",
+      "label": "Funding Amount",
+      "data_type": "money",
+      "required": true,
+      "origin": "user",
+      "description": "Total round amount raised"
+    },
+    {
+      "key": "funding_round",
+      "label": "Funding Round",
+      "data_type": "text",
+      "required": false,
+      "origin": "user",
+      "description": "Round series, e.g. Seed, Series A"
+    },
+    {
+      "key": "funding_date",
+      "label": "Funding Date",
+      "data_type": "date",
+      "required": true,
+      "origin": "user",
+      "description": "Announced or closed date of funding"
+    },
+    {
+      "key": "headquarters",
+      "label": "Headquarters",
+      "data_type": "location",
+      "required": false,
+      "origin": "ai_inferred",
+      "description": "City and state of main office"
+    },
+    {
+      "key": "investors",
+      "label": "Investors",
+      "data_type": "entity_list",
+      "required": false,
+      "origin": "user",
+      "description": "List of participating investment funds or angels"
+    }
+  ],
+  "filters": [
+    {
+      "field_key": "funding_amount",
+      "operator": "gt",
+      "value": 1000000
+    }
+  ],
+  "geography": [
+    "India"
+  ],
+  "time_window": {
+    "start": "2025-09-26",
+    "end": "2026-09-26"
+  },
+  "source_hints": [
+    "https://inc42.com",
+    "https://yourstory.com"
+  ],
+  "limit": 50,
+  "refresh": {
+    "frequency": "monthly",
+    "enabled": false
+  }
+}

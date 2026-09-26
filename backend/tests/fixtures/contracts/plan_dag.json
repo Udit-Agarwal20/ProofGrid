@@ -1,0 +1,128 @@
+{
+  "version": "1.0",
+  "nodes": [
+    {
+      "id": "discover_01",
+      "operator": "DISCOVER",
+      "depends_on": [],
+      "params": {
+        "query_template": "Indian AI startup funding 2026",
+        "recency_days": 365
+      },
+      "critical": true,
+      "constraints": {
+        "timeout_seconds": 30,
+        "max_retries": 2
+      }
+    },
+    {
+      "id": "fetch_01",
+      "operator": "FETCH_HTTP",
+      "depends_on": [
+        "discover_01"
+      ],
+      "params": {
+        "max_pages": 40
+      },
+      "critical": true,
+      "constraints": {
+        "timeout_seconds": 60,
+        "max_retries": 1
+      }
+    },
+    {
+      "id": "extract_01",
+      "operator": "EXTRACT",
+      "depends_on": [
+        "fetch_01"
+      ],
+      "params": {
+        "extraction_ladder": [
+          "jsonld",
+          "selectors",
+          "llm_structured"
+        ]
+      },
+      "critical": true,
+      "constraints": {
+        "timeout_seconds": 90,
+        "max_retries": 1
+      }
+    },
+    {
+      "id": "normalize_01",
+      "operator": "NORMALIZE",
+      "depends_on": [
+        "extract_01"
+      ],
+      "params": {
+        "policies": [
+          "money",
+          "date",
+          "location",
+          "url"
+        ]
+      },
+      "critical": true,
+      "constraints": {
+        "timeout_seconds": 30,
+        "max_retries": 0
+      }
+    },
+    {
+      "id": "resolve_01",
+      "operator": "ENTITY_RESOLVE",
+      "depends_on": [
+        "normalize_01"
+      ],
+      "params": {
+        "strategy": "blocking_rapidfuzz"
+      },
+      "critical": true,
+      "constraints": {
+        "timeout_seconds": 30,
+        "max_retries": 0
+      }
+    },
+    {
+      "id": "reconcile_01",
+      "operator": "RECONCILE",
+      "depends_on": [
+        "resolve_01"
+      ],
+      "params": {
+        "preserve_conflicts": true
+      },
+      "critical": true,
+      "constraints": {
+        "timeout_seconds": 30,
+        "max_retries": 0
+      }
+    },
+    {
+      "id": "materialize_01",
+      "operator": "MATERIALIZE",
+      "depends_on": [
+        "reconcile_01"
+      ],
+      "params": {},
+      "critical": true,
+      "constraints": {
+        "timeout_seconds": 30,
+        "max_retries": 1
+      }
+    }
+  ],
+  "rationale": [
+    "Discover public news articles via search adapter",
+    "Fetch static HTML safely",
+    "Extract schema fields with anchor quotes",
+    "Normalize currency and dates",
+    "Resolve duplicate company names",
+    "Preserve conflicting claims and derive canonical views",
+    "Materialize fast read model"
+  ],
+  "expected_pages": 40,
+  "expected_browser_pages": 0,
+  "expected_llm_calls": 30
+}

@@ -1,0 +1,32 @@
+{
+  "id": "e0a2db79-1144-4822-834c-d9b8978508ae",
+  "version": "1.0",
+  "entity_type": "company",
+  "fields": [
+    {
+      "key": "company_name",
+      "label": "Company Name",
+      "data_type": "text",
+      "required": true,
+      "origin": "user",
+      "description": "Company brand name"
+    },
+    {
+      "key": "website",
+      "label": "Website",
+      "data_type": "url",
+      "required": false,
+      "origin": "user",
+      "description": "Primary corporate homepage"
+    },
+    {
+      "key": "funding_amount",
+      "label": "Funding Amount",
+      "data_type": "money",
+      "required": true,
+      "origin": "user",
+      "description": "Total funding amount"
+    }
+  ],
+  "schema_hash": "a1b2c3d4e5f67890"
+}
