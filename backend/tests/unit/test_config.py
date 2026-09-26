@@ -4,14 +4,18 @@ import os
 from unittest.mock import patch
 
 import pytest
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
 from app.core.config import Settings, get_settings
 
 
 def test_settings_default_values() -> None:
     """Verify default configuration values."""
-    settings = Settings()
+    settings = Settings(
+        DATABASE_URL=None,
+        DATABASE_DIRECT_URL=None,
+        DATABASE_URL_UNPOOLED=None,
+    )
     assert settings.APP_ENV == "local"
     assert settings.APP_NAME == "proofgrid-api"
     assert settings.APP_VERSION == "0.1.0"
@@ -19,7 +23,41 @@ def test_settings_default_values() -> None:
     assert settings.API_PORT == 8000
     assert settings.API_HOST == "0.0.0.0"
     assert settings.PUBLIC_APP_URL == "http://localhost:3000"
-    assert settings.DATABASE_URL is None  # Optional in Phase 1
+    assert settings.DATABASE_URL is None
+    assert settings.DATABASE_DIRECT_URL is None
+    assert settings.DATABASE_URL_UNPOOLED is None
+    assert settings.database_url_unmasked is None
+    assert settings.database_direct_url_unmasked is None
+    assert settings.database_url_redacted == "<none>"
+    assert settings.database_direct_url_redacted == "<none>"
+
+
+def test_database_url_redaction_safety() -> None:
+    """Verify credentials are never exposed in logs, strings, or repr."""
+    raw_url = "postgresql://secretuser:supersecretpass@ep-pooler.neon.tech/neondb?sslmode=require"
+    settings = Settings(DATABASE_URL=SecretStr(raw_url))
+
+    # 1. repr must never contain password
+    settings_repr = repr(settings)
+    assert "supersecretpass" not in settings_repr
+    assert "SecretStr" in settings_repr
+
+    # 2. redacted string must mask password
+    redacted = settings.database_url_redacted
+    assert "supersecretpass" not in redacted
+    assert "secretuser" in redacted
+    assert "ep-pooler.neon.tech" in redacted
+    assert "sslmode=require" in redacted
+
+    # 3. Direct unpooled alias support
+    alias_settings = Settings(
+        DATABASE_DIRECT_URL=None,
+        DATABASE_URL_UNPOOLED=SecretStr("postgresql://admin:directpass@ep-direct.neon.tech/neondb"),
+    )
+    assert alias_settings.database_direct_url_unmasked is not None
+    assert "postgresql+psycopg://" in alias_settings.database_direct_url_unmasked
+    assert "directpass" not in alias_settings.database_direct_url_redacted
+    assert "admin:***@" in alias_settings.database_direct_url_redacted
 
 
 def test_settings_env_override() -> None:

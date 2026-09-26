@@ -196,3 +196,23 @@
   - *Disable all security controls*: High supply-chain vulnerability risk.
 - **Consequences**: Deterministic, secure CI and local builds.
 - **Status**: **Accepted**.
+
+---
+
+### ADR-019: Neon PostgreSQL as Persistence Provider with Dual-Connection Architecture
+- **Decision**: Adopt Neon PostgreSQL as the primary managed persistence provider for the ProofGrid prototype, replacing Supabase PostgreSQL, while maintaining a strict dual-connection architecture:
+  1. `DATABASE_URL`: Neon pooled runtime connection (PgBouncer in transaction mode) for FastAPI application queries and worker operations.
+  2. `DATABASE_DIRECT_URL`: Neon direct/unpooled connection for Alembic migrations, DDL statements, and administrative schema operations (with `DATABASE_URL_UNPOOLED` supported as a secondary alias).
+- **Reason**:
+  - ProofGrid requires standard, robust PostgreSQL with ACID transactions, JSONB, and standard client library support.
+  - Neon provides instantaneous database branching, managed serverless compute, and explicit separation between pooled transaction endpoints and direct administrative endpoints.
+  - ProofGrid does not rely on Supabase-specific proprietary features (Supabase Realtime, Edge Functions, or auto-generated PostgREST APIs), as progress reporting uses custom Server-Sent Events (SSE) from FastAPI and domain models are governed directly by Pydantic and SQLAlchemy.
+  - Low vendor coupling: The application layer targets standard PostgreSQL through SQLAlchemy 2.0 and `psycopg` 3 without proprietary SDK dependencies.
+  - Object storage and authentication configurations are intentionally deferred and decoupled from the database provider.
+- **Alternatives considered**:
+  - *Supabase PostgreSQL*: Feature-rich but bundles unneeded proprietary layers (Realtime, PostgREST) and lacks native database branching for lightweight migration preview environments.
+  - *Local PostgreSQL Docker exclusively*: Useful for offline development, but Neon provides hosted development parity for team collaboration.
+- **Consequences**:
+  - Runtime code must honor transaction-pooling constraints (e.g. no session-level advisory variables or persistent `SET search_path` across transactions).
+  - Migrations must strictly execute over `DATABASE_DIRECT_URL` to avoid PgBouncer DDL limitations.
+- **Status**: **Accepted**.

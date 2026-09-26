@@ -1,4 +1,4 @@
-.PHONY: help dev-api dev-worker dev-web test lint typecheck build check install
+.PHONY: help dev-api dev-worker dev-web test lint typecheck build check install db-check db-current db-upgrade db-downgrade test-db
 
 VENV_BIN := .venv/bin
 
@@ -42,6 +42,21 @@ typecheck:
 
 build:
 	pnpm --filter @proofgrid/web build
+
+db-check:
+	cd backend && $(VENV_BIN)/python -c "import asyncio; from app.db.health import check_database_health; res = asyncio.run(check_database_health()); print(f'Database Health: {res.status.upper()} (latency: {res.latency_ms}ms)' if res.status == 'healthy' else f'Database Health: {res.status.upper()} (error: {res.error})'); exit(0 if res.status == 'healthy' else 1)"
+
+db-current:
+	cd backend && $(VENV_BIN)/alembic current
+
+db-upgrade:
+	cd backend && $(VENV_BIN)/alembic upgrade head
+
+db-downgrade:
+	cd backend && $(VENV_BIN)/alembic downgrade -1
+
+test-db:
+	cd backend && $(VENV_BIN)/pytest -m integration
 
 check: lint typecheck test build
 	@echo ""

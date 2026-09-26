@@ -7,15 +7,44 @@ Future service credentials remain optional placeholders.
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def normalize_database_url(url: str, driver: str = "postgresql+psycopg") -> str:
+    """Normalize a database URL scheme to use the target driver (default: postgresql+psycopg)."""
+    if url.startswith("postgresql://"):
+        return f"{driver}://{url[len('postgresql://') :]}"
+    if url.startswith("postgres://"):
+        return f"{driver}://{url[len('postgres://') :]}"
+    return url
+
+
+def redact_database_url(url: str | SecretStr | None) -> str:
+    """Redact credentials from database URL for safe logging and diagnostics.
+
+    Never raises an exception or leaks secrets if parsing fails.
+    """
+    if url is None:
+        return "<none>"
+    raw_str = url.get_secret_value() if isinstance(url, SecretStr) else str(url)
+    if not raw_str.strip():
+        return "<none>"
+    try:
+        from sqlalchemy.engine import make_url
+
+        u = make_url(raw_str)
+        return u.render_as_string(hide_password=True)
+    except Exception:
+        # Under no circumstance return raw_str on parse failure
+        return "<redacted-unparseable-url>"
 
 
 class Settings(BaseSettings):
     """Authoritative strongly-typed application settings."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "backend/.env", "../.env"),
         env_file_encoding="utf-8",
         extra="ignore",
     )
@@ -33,12 +62,41 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
 
     # --------------------------------------------------------------------------
-    # Optional Placeholders for Future Phases (Phase 2+)
+    # Database Settings (Phase 2A - Neon PostgreSQL Authoritative Persistence)
     # --------------------------------------------------------------------------
-    DATABASE_URL: str | None = None
-    SUPABASE_URL: str | None = None
-    SUPABASE_SERVICE_ROLE_KEY: str | None = None
-    SUPABASE_JWKS_URL: str | None = None
+    DATABASE_URL: SecretStr | None = None
+    DATABASE_DIRECT_URL: SecretStr | None = None
+    DATABASE_URL_UNPOOLED: SecretStr | None = None
+
+    @property
+    def database_url_unmasked(self) -> str | None:
+        """Return the raw pooled DATABASE_URL string with normalized postgresql+psycopg scheme."""
+        if not self.DATABASE_URL:
+            return None
+        return normalize_database_url(self.DATABASE_URL.get_secret_value())
+
+    @property
+    def database_direct_url_unmasked(self) -> str | None:
+        """Return the raw direct/unpooled connection URL for Alembic migrations."""
+        target = self.DATABASE_DIRECT_URL or self.DATABASE_URL_UNPOOLED
+        if not target:
+            return None
+        return normalize_database_url(target.get_secret_value())
+
+    @property
+    def database_url_redacted(self) -> str:
+        """Return safe redacted string for runtime DATABASE_URL."""
+        return redact_database_url(self.DATABASE_URL)
+
+    @property
+    def database_direct_url_redacted(self) -> str:
+        """Return safe redacted string for direct migration DATABASE_DIRECT_URL."""
+        target = self.DATABASE_DIRECT_URL or self.DATABASE_URL_UNPOOLED
+        return redact_database_url(target)
+
+    # --------------------------------------------------------------------------
+    # Optional Placeholders for Future Phases
+    # --------------------------------------------------------------------------
     RAW_EVIDENCE_BUCKET: str = "proofgrid-raw-evidence"
 
     LLM_PROVIDER: str = "openai"

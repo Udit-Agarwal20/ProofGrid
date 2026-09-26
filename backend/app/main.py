@@ -11,6 +11,8 @@ from fastapi.responses import JSONResponse
 from app.core.config import get_settings
 from app.core.correlation import CorrelationIdMiddleware
 from app.core.logging import configure_logging, get_logger
+from app.db.engine import dispose_async_engine
+from app.db.health import check_database_health
 
 settings = get_settings()
 configure_logging(service_name=settings.APP_NAME, log_level=settings.LOG_LEVEL)
@@ -30,6 +32,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     yield
     logger.info("ProofGrid API service shutting down")
+    await dispose_async_engine()
 
 
 app = FastAPI(
@@ -73,17 +76,40 @@ async def health_live() -> dict[str, Any]:
     tags=["Health"],
     summary="Service Readiness Check",
     response_class=JSONResponse,
-    status_code=status.HTTP_200_OK,
 )
-async def health_ready() -> dict[str, Any]:
-    """Check if configuration has initialized successfully.
-
-    (In Phase 1, database checks are deferred to Phase 2).
-    """
-    return {
+async def health_ready() -> JSONResponse:
+    """Check if the service and configured dependencies are ready for traffic."""
+    response_payload: dict[str, Any] = {
         "status": "ok",
         "service": settings.APP_NAME,
         "version": settings.APP_VERSION,
-        "ready": True,
         "environment": settings.APP_ENV,
+        "ready": True,
     }
+
+    if settings.DATABASE_URL:
+        db_health = await check_database_health()
+        if db_health.status == "healthy":
+            response_payload["database"] = {
+                "status": "healthy",
+                "latency_ms": db_health.latency_ms,
+            }
+        else:
+            response_payload["status"] = "degraded"
+            response_payload["ready"] = False
+            response_payload["database"] = {
+                "status": "unhealthy",
+                "error": db_health.error,
+            }
+            return JSONResponse(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                content=response_payload,
+            )
+    else:
+        # Offline / unconfigured environment retains deterministic Phase 1 compatibility
+        response_payload["database"] = {"status": "unconfigured"}
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=response_payload,
+    )

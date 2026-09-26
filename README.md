@@ -70,20 +70,35 @@ make dev-web
 # Web application runs at http://localhost:3000
 ```
 
+### 4. Database Operations (Phase 2A Neon Foundation)
+```bash
+make db-check      # Ping Neon database and report latency (no secrets exposed)
+make db-current    # Show current Alembic migration revision
+make db-upgrade    # Apply Alembic migrations to HEAD
+make db-downgrade  # Rollback latest Alembic migration
+```
+
 ---
 
 ## Verification & Quality Gates
 
-Run the unified Phase 1 verification gate:
+Run the offline verification gate (CI-compatible, deterministic, offline):
 
 ```bash
 make check
 ```
 
-Or run individual checks:
+Run live database integration tests against Neon:
 
 ```bash
-make test        # Run backend pytest and frontend vitest
+make test-db
+```
+
+Or run individual verification checks:
+
+```bash
+make test        # Run backend pytest (unit + contracts) and frontend vitest
+make test-db     # Run live Neon PostgreSQL integration tests
 make lint        # Run ruff check and next lint
 make typecheck   # Run mypy (strict) and tsc --noEmit
 make build       # Run next production build
