@@ -1,4 +1,4 @@
-.PHONY: help dev-api dev-worker dev-web test lint typecheck build check install db-check db-current db-upgrade db-downgrade test-db
+.PHONY: help dev-api dev-worker dev-web test lint typecheck build check install db-check db-current db-upgrade db-downgrade db-schema-check test-db
 
 VENV_BIN := .venv/bin
 
@@ -54,6 +54,9 @@ db-upgrade:
 
 db-downgrade:
 	cd backend && $(VENV_BIN)/alembic downgrade -1
+
+db-schema-check:
+	cd backend && $(VENV_BIN)/python scripts/db_schema_check.py
 
 test-db:
 	cd backend && $(VENV_BIN)/pytest -m integration

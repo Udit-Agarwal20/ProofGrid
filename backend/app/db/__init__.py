@@ -3,6 +3,7 @@
 Exposes declarative base, engine management, session dependency, and health checks.
 """
 
+from app.db import models
 from app.db.base import Base
 from app.db.engine import (
     create_engine_instance,
@@ -21,4 +22,5 @@ __all__ = [
     "get_async_engine",
     "get_db_session",
     "get_session_factory",
+    "models",
 ]

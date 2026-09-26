@@ -14,6 +14,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from app.core.config import get_settings  # noqa: E402
+from app.db import models as db_models  # noqa: F401, E402
 from app.db.base import Base  # noqa: E402
 
 # this is the Alembic Config object, which provides

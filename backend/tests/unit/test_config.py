@@ -99,3 +99,17 @@ def test_get_settings_cached() -> None:
     s1 = get_settings()
     s2 = get_settings()
     assert s1 is s2
+
+
+def test_db_schema_check_omits_dsn_and_credentials() -> None:
+    """Verify scripts/db_schema_check.py source code contains no DSN or URL printing."""
+    script_path = os.path.join(os.path.dirname(__file__), "../../scripts/db_schema_check.py")
+    with open(script_path) as f:
+        content = f.read()
+
+    assert (
+        "database_url" not in content.lower() or "if not settings.database_url" in content.lower()
+    )
+    assert "database_url_redacted" not in content
+    assert "database_url_unmasked" not in content
+    assert "print(settings.database_url" not in content
