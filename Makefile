@@ -1,4 +1,4 @@
-.PHONY: help dev-api dev-worker dev-web test lint typecheck build check install db-check db-current db-upgrade db-downgrade db-schema-check test-db
+.PHONY: help dev-api dev-worker dev-web test lint typecheck build check install db-check db-current db-upgrade db-downgrade db-schema-check test-db test-compiler
 
 VENV_BIN := .venv/bin
 
@@ -60,6 +60,9 @@ db-schema-check:
 
 test-db:
 	cd backend && $(VENV_BIN)/pytest -m integration
+
+test-compiler:
+	cd backend && $(VENV_BIN)/pytest tests/unit/test_requirement_compiler.py
 
 check: lint typecheck test build
 	@echo ""
