@@ -1,0 +1,23 @@
+{
+  "notice": "SYNTHETIC SHOWCASE FIXTURE. Not a real company or funding assertion.",
+  "records": [
+    {
+      "company_name": "Nimbus AI Demo",
+      "website": "https://nimbus-demo.example",
+      "founders": [
+        "Asha Demo"
+      ],
+      "headquarters": "Bengaluru, India",
+      "industry": "AI",
+      "funding_round": "Series A",
+      "funding_amount": "$4.5 million",
+      "currency": "USD",
+      "investors": [
+        "Demo Ventures"
+      ],
+      "funding_date": "2026-09-01",
+      "announced_date": "2026-09-01",
+      "source_url": "https://nimbus-demo.example/announcement"
+    }
+  ]
+}

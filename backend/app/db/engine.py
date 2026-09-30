@@ -44,6 +44,7 @@ def create_engine_instance(
         "pool_size": 10,
         "max_overflow": 5,
         "echo": False,
+        "hide_parameters": True,
     }
     default_kwargs.update(kwargs)
 

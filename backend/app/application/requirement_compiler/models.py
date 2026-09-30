@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.domain.clock import utc_now
 from app.domain.contracts import (
     DatasetSchema,
     DateRange,
@@ -24,7 +25,7 @@ class CompilationContext(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     reference_date: datetime = Field(
-        default_factory=lambda: datetime.now(UTC),
+        default_factory=utc_now,
         description="Temporal anchor date for evaluating relative expressions (e.g. 'last 18 months')",
     )
 
@@ -74,7 +75,10 @@ class ClarificationQuestion(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     question_id: str = Field(min_length=1, description="Unique question identifier")
-    ambiguity_code: str = Field(min_length=1, description="Associated Ambiguity code")
+    ambiguity_code: str = Field(
+        min_length=1,
+        description="Associated Ambiguity code. Must refer to a BLOCKING or WARNING ambiguity code, never an INFO ambiguity.",
+    )
     question: str = Field(min_length=1, description="Specific, concise question text")
     options: list[str] = Field(default_factory=list, description="Structured choices if applicable")
     impact_summary: str = Field(min_length=1, description="Summary of how choice affects dataset")
@@ -135,29 +139,104 @@ class CandidateTrustPreferences(BaseModel):
     max_estimated_cost_usd: Decimal = Decimal("3.00")
 
 
-class CandidateCompilationDraft(BaseModel):
-    """Raw structured candidate emitted by AI provider before deterministic validation."""
+class CandidateCompiledDraft(BaseModel):
+    """Structured candidate proposed when requirement can be compiled into a valid dataset proposal."""
 
     model_config = ConfigDict(extra="allow")
 
-    entity_type: str = "company"
-    goal: str
-    fields: list[CandidateFieldSpec] = Field(default_factory=list)
-    filters: list[CandidateFilterSpec] = Field(default_factory=list)
-    geography: list[str] = Field(default_factory=list)
-    time_window: DateRange | None = None
-    source_hints: list[str] = Field(default_factory=list)
-    limit: int = 50
-    refresh: RefreshPolicy | None = None
-    trust_preferences: CandidateTrustPreferences = Field(default_factory=CandidateTrustPreferences)
-    ambiguities: list[Ambiguity] = Field(default_factory=list)
-    assumptions: list[Assumption] = Field(default_factory=list)
-    clarification_questions: list[ClarificationQuestion] = Field(default_factory=list)
+    goal: str = Field(description="Normalized summary of user data requirement")
+    entity_type: str = Field(default="company", description="Target entity type to extract")
+    fields: list[CandidateFieldSpec] = Field(
+        default_factory=list, description="Proposed schema fields"
+    )
+    filters: list[CandidateFilterSpec] = Field(
+        default_factory=list, description="Semantic filters to apply"
+    )
+    geography: list[str] = Field(default_factory=list, description="Target geographic constraints")
+    time_window: DateRange | None = Field(
+        default=None, description="Explicit or relative date range, or null if no temporal bounds"
+    )
+    source_hints: list[str] = Field(default_factory=list, description="Suggested source categories")
+    limit: int = Field(default=50, ge=1, le=1000, description="Max entities to acquire")
+    refresh: RefreshPolicy | None = Field(
+        default=None,
+        description="Optional refresh policy. Emit null if no recurring refresh is requested.",
+    )
+    trust_preferences: CandidateTrustPreferences = Field(
+        default_factory=CandidateTrustPreferences,
+        description="Trust, corroboration, and execution budget preferences",
+    )
+    ambiguities: list[Ambiguity] = Field(
+        default_factory=list, description="Documented non-blocking ambiguities"
+    )
+    assumptions: list[Assumption] = Field(
+        default_factory=list, description="Explicit modeling assumptions"
+    )
+    clarification_questions: list[ClarificationQuestion] = Field(
+        default_factory=list, description="Questions for WARNING ambiguities if applicable"
+    )
 
-    # Sentinel fields for checking illicit PlanDAG / workflow operator injections
-    plan_dag: Any | None = None
-    nodes: Any | None = None
-    operators: Any | None = None
+
+class CandidateClarificationDraft(BaseModel):
+    """Small structured candidate proposed when a BLOCKING ambiguity prevents compilation."""
+
+    model_config = ConfigDict(extra="allow")
+
+    ambiguities: list[Ambiguity] = Field(
+        default_factory=list, description="Surfaced ambiguities, at least one must be BLOCKING"
+    )
+    assumptions: list[Assumption] = Field(
+        default_factory=list, description="Explicit assumptions adopted"
+    )
+    clarification_questions: list[ClarificationQuestion] = Field(
+        default_factory=list,
+        description="Targeted questions to resolve material BLOCKING ambiguities. Never ask questions for INFO ambiguities.",
+    )
+    detected_entity_type: str | None = Field(
+        default=None, description="Tentative entity type if detected"
+    )
+    detected_geography: list[str] = Field(
+        default_factory=list, description="Detected geographic references"
+    )
+    detected_time_window: DateRange | None = Field(
+        default=None, description="Detected temporal bounds if identifiable"
+    )
+    candidate_fields: list[str] = Field(
+        default_factory=list, description="Keywords or fields identifiable from user prompt"
+    )
+
+
+class CandidateCompilerEnvelope(BaseModel):
+    """Branch-specific provider candidate envelope.
+
+    Aligns provider generation with ProofGrid's two-outcome architecture:
+    - COMPILED: candidate proposal with schema and trust preferences.
+    - NEEDS_CLARIFICATION: lightweight clarification questions for blocking ambiguities.
+
+    Enforces the XOR invariant: exactly one of compiled or clarification is non-null.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    outcome_type: Literal["COMPILED", "NEEDS_CLARIFICATION"] = Field(
+        description="Indicates whether requirement can be compiled or requires user clarification"
+    )
+    requires_confirmation: Literal[True] = Field(
+        default=True,
+        description="Always True. Confirmation boundary is mandatory.",
+    )
+    compiled: CandidateCompiledDraft | None = Field(
+        default=None,
+        description="Populate when outcome_type is COMPILED. Must be null when NEEDS_CLARIFICATION.",
+    )
+    clarification: CandidateClarificationDraft | None = Field(
+        default=None,
+        description="Populate when outcome_type is NEEDS_CLARIFICATION. Must be null when COMPILED.",
+    )
+
+
+# Backward-compatible alias for existing code
+CandidateCompilationDraft = CandidateCompiledDraft
 
 
 class CompilerMetadata(BaseModel):
@@ -173,7 +252,7 @@ class CompilerMetadata(BaseModel):
     reference_date: str = Field(
         description="ISO-8601 temporal anchor date used for evaluating relative expressions"
     )
-    compiled_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    compiled_at: datetime = Field(default_factory=utc_now)
 
 
 class CompilerResult(BaseModel):

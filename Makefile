@@ -1,4 +1,4 @@
-.PHONY: help dev-api dev-worker dev-web test lint typecheck build check install db-check db-current db-upgrade db-downgrade db-schema-check test-db test-compiler
+.PHONY: help dev-api dev-worker dev-web test lint typecheck build check install db-check db-current db-upgrade db-downgrade db-schema-check test-db test-compiler test-llm-live test-groq-live eval-compiler-live
 
 VENV_BIN := .venv/bin
 
@@ -12,10 +12,10 @@ help:
 	@echo "  make lint        Run backend and frontend linters"
 	@echo "  make typecheck   Run backend and frontend type checkers"
 	@echo "  make build       Build frontend for production"
-	@echo "  make check       Run full Phase 1 verification gate"
+	@echo "  make check       Run offline backend verification gate"
 
 install:
-	cd backend && uv pip install -e ".[dev]"
+	cd backend && uv sync --frozen --extra dev
 	pnpm install
 
 dev-api:
@@ -37,7 +37,7 @@ lint:
 	pnpm --filter @proofgrid/web lint
 
 typecheck:
-	cd backend && $(VENV_BIN)/mypy app worker tests
+	cd backend && $(VENV_BIN)/mypy app worker tests scripts
 	pnpm --filter @proofgrid/web typecheck
 
 build:
@@ -64,8 +64,32 @@ test-db:
 test-compiler:
 	cd backend && $(VENV_BIN)/pytest tests/unit/test_requirement_compiler.py
 
-check: lint typecheck test build
-	@echo ""
-	@echo "=================================================="
-	@echo "ALL PHASE 1 GATES PASSED (Verification Clean)"
-	@echo "=================================================="
+test-llm-live:
+	cd backend && $(VENV_BIN)/pytest -m llm_live tests/integration/test_gemini_live.py
+
+test-groq-live:
+	cd backend && $(VENV_BIN)/pytest -m llm_live tests/integration/test_groq_live.py
+
+eval-compiler-live:
+	cd backend && $(VENV_BIN)/python scripts/eval_compiler_live.py
+
+check:
+	cd backend && $(VENV_BIN)/ruff check app worker tests scripts
+	cd backend && $(VENV_BIN)/ruff format --check app worker tests scripts
+	cd backend && $(VENV_BIN)/mypy app worker tests scripts
+	cd backend && $(VENV_BIN)/pytest
+
+check-all: check lint typecheck test build
+
+test-unit:
+	cd backend && $(VENV_BIN)/pytest tests/unit tests/contracts
+
+test-security:
+	cd backend && $(VENV_BIN)/pytest tests/security
+
+test-e2e:
+	cd backend && $(VENV_BIN)/pytest -m integration tests/e2e
+
+run-api: dev-api
+
+run-worker: dev-worker

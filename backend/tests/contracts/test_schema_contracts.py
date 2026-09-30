@@ -17,6 +17,7 @@ from app.db.base import Base
 from app.domain.enums import TrustStatus
 
 EXPECTED_BUSINESS_TABLES = {
+    "exports",
     "projects",
     "requirements",
     "dataset_schemas",
@@ -47,7 +48,7 @@ def test_expected_table_inventory() -> None:
     assert registered_tables == EXPECTED_BUSINESS_TABLES, (
         f"Mismatch in table inventory. Diff: {registered_tables ^ EXPECTED_BUSINESS_TABLES}"
     )
-    assert len(registered_tables) == 21
+    assert len(registered_tables) == 22
 
 
 def test_table_primary_keys() -> None:
@@ -203,7 +204,7 @@ def test_critical_unique_constraints() -> None:
     # 8. raw_documents content hash must NOT be unique across sources
     rd_uqs = table_uqs["raw_documents"]
     for uq_name, cols in rd_uqs.items():
-        assert "content_hash" not in cols, (
+        assert "content_hash" not in cols or {"workflow_run_id", "source_id"}.issubset(cols), (
             f"raw_documents must not enforce uniqueness on content_hash ({uq_name}: {cols}) "
             "because identical bytes from separate sources are independent provenance events."
         )

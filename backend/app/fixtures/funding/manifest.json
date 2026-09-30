@@ -1,0 +1,38 @@
+[
+  {
+    "file": "company.json",
+    "url": "https://nimbus-demo.example/announcement",
+    "content_type": "application/json",
+    "retrieved_at": "2026-09-15T12:00:00Z",
+    "acquisition_method": "FIXTURE",
+    "metadata": {
+      "first_party": true,
+      "synthetic": true,
+      "fixture_label": "Synthetic showcase evidence, not real business facts"
+    }
+  },
+  {
+    "file": "news.html",
+    "url": "https://demo-journal.example/funding",
+    "content_type": "text/html",
+    "retrieved_at": "2026-09-15T12:00:00Z",
+    "acquisition_method": "FIXTURE",
+    "metadata": {
+      "first_party": false,
+      "synthetic": true,
+      "fixture_label": "Synthetic showcase evidence, not real business facts"
+    }
+  },
+  {
+    "file": "independent.json",
+    "url": "https://sample-report.example/veda",
+    "content_type": "application/json",
+    "retrieved_at": "2026-09-15T12:00:00Z",
+    "acquisition_method": "FIXTURE",
+    "metadata": {
+      "first_party": false,
+      "synthetic": true,
+      "fixture_label": "Synthetic showcase evidence, not real business facts"
+    }
+  }
+]

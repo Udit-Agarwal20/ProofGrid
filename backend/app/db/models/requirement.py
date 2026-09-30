@@ -54,6 +54,9 @@ class Requirement(Base):
         ForeignKey("projects.id", ondelete="RESTRICT"),
         nullable=False,
     )
+    compiler_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, nullable=False, default=dict, server_default="{}"
+    )
     original_prompt: Mapped[str] = mapped_column(Text, nullable=False)
     requirement_spec: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
     status: Mapped[str] = mapped_column(String(50), nullable=False, default="COMPILED")

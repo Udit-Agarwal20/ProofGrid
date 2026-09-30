@@ -53,3 +53,5 @@ __all__ = [
     # 21. Transactional Outbox
     "OutboxEvent",
 ]
+
+from app.db.models.export import Export as Export

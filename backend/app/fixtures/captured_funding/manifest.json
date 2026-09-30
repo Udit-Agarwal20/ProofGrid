@@ -1,0 +1,36 @@
+[
+  {
+    "url": "https://www.sarvam.ai/blogs/announcing-series-a",
+    "content_type": "text/html",
+    "retrieved_at": "2026-09-30T04:04:07.839437Z",
+    "acquisition_method": "FIXTURE",
+    "http_status": 200,
+    "metadata": {
+      "robots_allowed": true,
+      "parser_version": "1.0",
+      "first_party": true,
+      "synthetic": false,
+      "original_acquisition_method": "HTTP",
+      "capture_sha256": "91e07284a2103f245072ba13c16bb3c5314676cf5f428e2308994849fe6da9ae",
+      "fixture_label": "Captured public historical company announcement; original dates retained"
+    },
+    "file": "sarvam-series-a.html"
+  },
+  {
+    "url": "https://neysa.ai/press-release/neysa-raises-20-million-in-seed-funding-to-accelerate-generative-ai-adoption-for-enterprises/",
+    "content_type": "text/html",
+    "retrieved_at": "2026-09-30T04:04:08.208955Z",
+    "acquisition_method": "FIXTURE",
+    "http_status": 200,
+    "metadata": {
+      "robots_allowed": true,
+      "parser_version": "1.0",
+      "first_party": true,
+      "synthetic": false,
+      "original_acquisition_method": "HTTP",
+      "capture_sha256": "e70691461d211d9684d1d65c55af581bc2d1f8e7896039a6e9c481b1eb9c4511",
+      "fixture_label": "Captured public historical company announcement; original dates retained"
+    },
+    "file": "neysa-seed.html"
+  }
+]

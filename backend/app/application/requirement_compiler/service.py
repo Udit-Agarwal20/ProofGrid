@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import datetime
 from typing import Any
 
 from app.ai.exceptions import AIProviderError, AIProviderTimeoutError
@@ -14,7 +14,7 @@ from app.application.requirement_compiler.errors import (
     CompilerValidationError,
 )
 from app.application.requirement_compiler.models import (
-    CandidateCompilationDraft,
+    CandidateCompilerEnvelope,
     CompilationContext,
     CompilationOutcome,
     CompilerResult,
@@ -22,6 +22,7 @@ from app.application.requirement_compiler.models import (
 from app.application.requirement_compiler.prompts import build_compiler_request
 from app.application.requirement_compiler.validation import validate_compilation_draft
 from app.db.models.requirement import DatasetSchema, Requirement, TrustContract
+from app.domain.clock import utc_now
 from app.persistence.errors import PersistenceConflictError
 from app.persistence.repositories.outbox import OutboxEventCreate
 from app.persistence.unit_of_work import AbstractUnitOfWork
@@ -42,7 +43,7 @@ class RequirementCompiler:
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._provider = provider
-        self._clock = clock or (lambda: datetime.now(UTC))
+        self._clock = clock or utc_now
 
     async def compile(
         self,
@@ -76,20 +77,20 @@ class RequirementCompiler:
 
         # 3. Invoke provider adapter
         try:
-            candidate_draft, provider_metadata = await self._provider.generate_structured(
+            candidate_envelope, provider_metadata = await self._provider.generate_structured(
                 request=request,
-                output_schema=CandidateCompilationDraft,
+                output_schema=CandidateCompilerEnvelope,
             )
         except AIProviderTimeoutError as exc:
-            raise CompilerProviderError(f"Provider invocation timed out: {exc}") from exc
+            raise CompilerProviderError("Provider invocation timed out.") from exc
         except AIProviderError as exc:
-            raise CompilerProviderError(f"Provider invocation failed: {exc}") from exc
+            raise CompilerProviderError("Provider invocation failed.") from exc
         except Exception as exc:
-            raise CompilerProviderError(f"Unexpected provider error: {exc}") from exc
+            raise CompilerProviderError("Unexpected provider failure.") from exc
 
         # 4. Deterministic post-validation and semantic consistency
         outcome = validate_compilation_draft(
-            draft=candidate_draft,
+            draft=candidate_envelope,
             provider_metadata=provider_metadata,
             reference_date=comp_context.reference_date,
             raw_prompt=normalized_prompt,

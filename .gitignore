@@ -55,6 +55,7 @@ out/
 coverage/
 *.lcov
 .nyc_output
+.playwright-mcp/
 
 # IDE & Editor
 .idea/

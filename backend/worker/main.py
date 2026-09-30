@@ -1,18 +1,11 @@
-"""ProofGrid Worker entrypoint.
-
-For Phase 1:
-- Loads configuration
-- Initializes structured logging
-- Emits a clean startup message
-- Handles graceful shutdown (SIGINT / SIGTERM)
-- Does NOT poll or connect to PostgreSQL queue (Phase 2/5).
-"""
+"""Durable PostgreSQL workflow worker and outbox dispatcher."""
 
 import argparse
 import asyncio
 import functools
 import signal
 import sys
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -21,12 +14,14 @@ _backend_root = str(Path(__file__).resolve().parent.parent)
 if _backend_root not in sys.path:
     sys.path.insert(0, _backend_root)
 
+from app.application.execution.factory import create_dispatcher, create_runner  # noqa: E402
 from app.core.config import get_settings  # noqa: E402
 from app.core.logging import configure_logging, get_logger  # noqa: E402
+from app.db.engine import dispose_async_engine  # noqa: E402
 
 
 class ProofGridWorker:
-    """Minimal Phase 1 background worker process."""
+    """Background consumer with bounded execution and graceful shutdown."""
 
     def __init__(self) -> None:
         self.settings = get_settings()
@@ -50,7 +45,7 @@ class ProofGridWorker:
                 "service": "proofgrid-worker",
                 "version": self.settings.APP_VERSION,
                 "env": self.settings.APP_ENV,
-                "status": "standby_phase1",
+                "status": "configured",
             },
         )
 
@@ -67,10 +62,19 @@ class ProofGridWorker:
                 # Windows fallback
                 signal.signal(sig, self.handle_signal)
 
-        self.logger.info("Worker awaiting tasks (Phase 1 idle state; queue disabled)...")
+        self.logger.info("Worker polling the durable PostgreSQL queue...")
 
-        # Wait until termination signal is received
-        await self.stop_event.wait()
+        runner = create_runner(self.settings)
+        dispatcher = create_dispatcher(self.settings)
+        try:
+            while not self.stop_event.is_set():
+                did_work = await runner.tick()
+                did_work = await dispatcher.tick() or did_work
+                if not did_work:
+                    with suppress(TimeoutError):
+                        await asyncio.wait_for(self.stop_event.wait(), timeout=0.5)
+        finally:
+            await dispose_async_engine()
         self.logger.info("ProofGrid Worker graceful shutdown complete.")
         return 0
 

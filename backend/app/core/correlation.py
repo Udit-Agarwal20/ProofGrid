@@ -7,7 +7,7 @@ from collections.abc import Awaitable, Callable
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 
-from app.core.logging import set_correlation_id
+from app.core.logging import get_logger, set_correlation_id
 
 CORRELATION_ID_HEADER = "X-Correlation-ID"
 _VALID_ID_REGEX = re.compile(r"^[a-zA-Z0-9_\-\.]{8,64}$")
@@ -44,6 +44,10 @@ class CorrelationIdMiddleware(BaseHTTPMiddleware):
         try:
             response = await call_next(request)
             response.headers[CORRELATION_ID_HEADER] = correlation_id
+            get_logger("proofgrid.http").info(
+                "Request completed",
+                extra={"method": request.method, "status_code": response.status_code},
+            )
             return response
         finally:
             # Clean up context for this task

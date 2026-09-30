@@ -88,6 +88,9 @@ class RawDocument(Base):
 
     __tablename__ = "raw_documents"
     __table_args__ = (
+        UniqueConstraint(
+            "workflow_run_id", "source_id", "content_hash", name="uq_raw_document_observation"
+        ),
         CheckConstraint("size_bytes >= 0", name="size_bytes"),
         Index("ix_raw_documents_project_content_hash", "project_id", "content_hash"),
         Index("ix_raw_documents_source_id", "source_id"),
@@ -123,6 +126,7 @@ class RawDocument(Base):
     http_status: Mapped[int | None] = mapped_column(Integer, nullable=True)
     mime_type: Mapped[str | None] = mapped_column(String(100), nullable=True)
     content_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    content: Mapped[str | None] = mapped_column(Text, nullable=True)
     storage_uri: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     retrieval_metadata: Mapped[dict[str, Any]] = mapped_column(
@@ -159,6 +163,7 @@ class Claim(Base):
 
     __tablename__ = "claims"
     __table_args__ = (
+        UniqueConstraint("workflow_run_id", "claim_hash", name="uq_claims_run_hash"),
         Index("ix_claims_project_id", "project_id"),
         Index("ix_claims_entity_field", "entity_id", "field_key"),
         Index("ix_claims_raw_document_id", "raw_document_id"),

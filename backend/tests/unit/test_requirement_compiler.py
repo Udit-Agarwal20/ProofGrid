@@ -22,7 +22,10 @@ from app.application.requirement_compiler.models import (
     Ambiguity,
     AmbiguitySeverity,
     Assumption,
+    CandidateClarificationDraft,
     CandidateCompilationDraft,
+    CandidateCompiledDraft,
+    CandidateCompilerEnvelope,
     CandidateFieldSpec,
     ClarificationQuestion,
     CompilationContext,
@@ -763,3 +766,313 @@ def test_compiler_performs_no_acquisition_or_tools() -> None:
     forbidden_tokens = ["RawDocument", "EvidenceAnchor", "Claim", "PlanDAG", "FETCH_HTTP"]
     for token in forbidden_tokens:
         assert token not in source_code, f"Compiler service must not reference {token}"
+
+
+# -----------------------------------------------------------------------------
+# 25. Branch-Specific Candidate Compiler Envelope Tests
+# -----------------------------------------------------------------------------
+@pytest.fixture
+def dummy_provider_metadata() -> ProviderMetadata:
+    """Dummy metadata for offline validation testing."""
+    return ProviderMetadata(
+        provider_name="mock-provider",
+        model_name="mock-model",
+        prompt_tokens=50,
+        completion_tokens=100,
+        latency_ms=15.0,
+        raw_finish_reason="stop",
+    )
+
+
+@pytest.fixture
+def sample_compiled_draft() -> CandidateCompiledDraft:
+    """Valid CandidateCompiledDraft for testing."""
+    return CandidateCompiledDraft(
+        goal="Find Indian AI startups that raised funding",
+        entity_type="company",
+        fields=[
+            CandidateFieldSpec(
+                key="company_name",
+                label="Company Name",
+                data_type="text",
+                required=True,
+            )
+        ],
+        limit=50,
+    )
+
+
+@pytest.fixture
+def sample_clarification_draft() -> CandidateClarificationDraft:
+    """Valid CandidateClarificationDraft for testing."""
+    return CandidateClarificationDraft(
+        ambiguities=[
+            Ambiguity(
+                code="AMB_ENTITY_UNSPECIFIED",
+                message="Target entity is unknown",
+                severity=AmbiguitySeverity.BLOCKING,
+                blocking=True,
+                possible_interpretations=["Companies", "Products"],
+            )
+        ],
+        clarification_questions=[
+            ClarificationQuestion(
+                question_id="Q1",
+                ambiguity_code="AMB_ENTITY_UNSPECIFIED",
+                question="What type of entity are you searching for?",
+                impact_summary="Defines target entity schema",
+            )
+        ],
+    )
+
+
+def test_envelope_compiled_branch_valid(
+    sample_compiled_draft: CandidateCompiledDraft,
+    dummy_provider_metadata: ProviderMetadata,
+) -> None:
+    """Valid COMPILED envelope maps to CompilerResult with valid contracts."""
+    envelope = CandidateCompilerEnvelope(
+        outcome_type="COMPILED",
+        requires_confirmation=True,
+        compiled=sample_compiled_draft,
+        clarification=None,
+    )
+    outcome = validate_compilation_draft(envelope, dummy_provider_metadata)
+
+    assert isinstance(outcome, CompilerResult)
+    assert outcome.status == "COMPILED"
+    assert outcome.requires_confirmation is True
+    assert outcome.requirement_spec.entity_type == "company"
+    assert len(outcome.dataset_schema_proposal.fields) == 1
+    assert outcome.dataset_schema_proposal.fields[0].key == "company_name"
+
+
+def test_envelope_clarification_branch_valid(
+    sample_clarification_draft: CandidateClarificationDraft,
+    dummy_provider_metadata: ProviderMetadata,
+) -> None:
+    """Valid NEEDS_CLARIFICATION envelope maps to CompilerClarificationResult."""
+    envelope = CandidateCompilerEnvelope(
+        outcome_type="NEEDS_CLARIFICATION",
+        requires_confirmation=True,
+        compiled=None,
+        clarification=sample_clarification_draft,
+    )
+    outcome = validate_compilation_draft(envelope, dummy_provider_metadata)
+
+    assert isinstance(outcome, CompilerClarificationResult)
+    assert outcome.status == "NEEDS_CLARIFICATION"
+    assert outcome.requires_confirmation is True
+    assert len(outcome.ambiguities) == 1
+    assert outcome.ambiguities[0].blocking is True
+    assert len(outcome.clarification_questions) == 1
+    assert outcome.clarification_questions[0].question_id == "Q1"
+
+
+def test_envelope_compiled_with_null_compiled_rejected(
+    dummy_provider_metadata: ProviderMetadata,
+) -> None:
+    """COMPILED envelope with compiled=None violates XOR invariant and is rejected."""
+    envelope = CandidateCompilerEnvelope(
+        outcome_type="COMPILED",
+        requires_confirmation=True,
+        compiled=None,
+        clarification=None,
+    )
+    with pytest.raises(CompilerValidationError, match="must have non-null 'compiled' draft"):
+        validate_compilation_draft(envelope, dummy_provider_metadata)
+
+
+def test_envelope_compiled_with_non_null_clarification_rejected(
+    sample_compiled_draft: CandidateCompiledDraft,
+    sample_clarification_draft: CandidateClarificationDraft,
+    dummy_provider_metadata: ProviderMetadata,
+) -> None:
+    """COMPILED envelope with both compiled and clarification non-null is rejected."""
+    envelope = CandidateCompilerEnvelope(
+        outcome_type="COMPILED",
+        requires_confirmation=True,
+        compiled=sample_compiled_draft,
+        clarification=sample_clarification_draft,
+    )
+    with pytest.raises(CompilerValidationError, match="must have null 'clarification' draft"):
+        validate_compilation_draft(envelope, dummy_provider_metadata)
+
+
+def test_envelope_clarification_with_null_clarification_rejected(
+    dummy_provider_metadata: ProviderMetadata,
+) -> None:
+    """NEEDS_CLARIFICATION envelope with clarification=None violates XOR invariant and is rejected."""
+    envelope = CandidateCompilerEnvelope(
+        outcome_type="NEEDS_CLARIFICATION",
+        requires_confirmation=True,
+        compiled=None,
+        clarification=None,
+    )
+    with pytest.raises(CompilerValidationError, match="must have non-null 'clarification' draft"):
+        validate_compilation_draft(envelope, dummy_provider_metadata)
+
+
+def test_envelope_clarification_with_non_null_compiled_rejected(
+    sample_compiled_draft: CandidateCompiledDraft,
+    sample_clarification_draft: CandidateClarificationDraft,
+    dummy_provider_metadata: ProviderMetadata,
+) -> None:
+    """NEEDS_CLARIFICATION envelope with both compiled and clarification non-null is rejected."""
+    envelope = CandidateCompilerEnvelope(
+        outcome_type="NEEDS_CLARIFICATION",
+        requires_confirmation=True,
+        compiled=sample_compiled_draft,
+        clarification=sample_clarification_draft,
+    )
+    with pytest.raises(CompilerValidationError, match="must have null 'compiled' draft"):
+        validate_compilation_draft(envelope, dummy_provider_metadata)
+
+
+def test_envelope_clarification_requires_blocking_ambiguity(
+    dummy_provider_metadata: ProviderMetadata,
+) -> None:
+    """NEEDS_CLARIFICATION branch without any BLOCKING ambiguity is rejected."""
+    clarification = CandidateClarificationDraft(
+        ambiguities=[
+            Ambiguity(
+                code="AMB_MINOR_NOTE",
+                message="Minor informative observation",
+                severity=AmbiguitySeverity.WARNING,
+                blocking=False,
+            )
+        ],
+        clarification_questions=[
+            ClarificationQuestion(
+                question_id="Q1",
+                ambiguity_code="AMB_MINOR_NOTE",
+                question="Clarify minor note?",
+                impact_summary="Minor adjustment",
+            )
+        ],
+    )
+    envelope = CandidateCompilerEnvelope(
+        outcome_type="NEEDS_CLARIFICATION",
+        requires_confirmation=True,
+        compiled=None,
+        clarification=clarification,
+    )
+    with pytest.raises(CompilerValidationError, match="requires at least one BLOCKING ambiguity"):
+        validate_compilation_draft(envelope, dummy_provider_metadata)
+
+
+def test_envelope_clarification_questions_cannot_reference_info_ambiguity(
+    dummy_provider_metadata: ProviderMetadata,
+) -> None:
+    """Clarification question referencing an INFO ambiguity is strictly rejected."""
+    clarification = CandidateClarificationDraft(
+        ambiguities=[
+            Ambiguity(
+                code="AMB_BLOCKING",
+                message="Blocking issue",
+                severity=AmbiguitySeverity.BLOCKING,
+                blocking=True,
+            ),
+            Ambiguity(
+                code="AMB_INFO",
+                message="Informative only",
+                severity=AmbiguitySeverity.INFO,
+                blocking=False,
+            ),
+        ],
+        clarification_questions=[
+            ClarificationQuestion(
+                question_id="Q1",
+                ambiguity_code="AMB_INFO",
+                question="Why ask about info?",
+                impact_summary="None",
+            )
+        ],
+    )
+    envelope = CandidateCompilerEnvelope(
+        outcome_type="NEEDS_CLARIFICATION",
+        requires_confirmation=True,
+        compiled=None,
+        clarification=clarification,
+    )
+    with pytest.raises(CompilerValidationError, match="non-material INFO ambiguity"):
+        validate_compilation_draft(envelope, dummy_provider_metadata)
+
+
+def test_envelope_clarification_does_not_fabricate_requirementspec(
+    sample_clarification_draft: CandidateClarificationDraft,
+    dummy_provider_metadata: ProviderMetadata,
+) -> None:
+    """Clarification outcome produces CompilerClarificationResult and never fabricates RequirementSpec."""
+    envelope = CandidateCompilerEnvelope(
+        outcome_type="NEEDS_CLARIFICATION",
+        requires_confirmation=True,
+        compiled=None,
+        clarification=sample_clarification_draft,
+    )
+    outcome = validate_compilation_draft(envelope, dummy_provider_metadata)
+
+    assert isinstance(outcome, CompilerClarificationResult)
+    assert not hasattr(outcome, "requirement_spec")
+    assert not hasattr(outcome, "dataset_schema_proposal")
+    assert not hasattr(outcome, "trust_contract_proposal")
+
+
+def test_envelope_compiled_branch_cannot_have_unresolved_blocking_ambiguity(
+    dummy_provider_metadata: ProviderMetadata,
+) -> None:
+    """COMPILED envelope with an unresolved BLOCKING ambiguity is rejected."""
+    compiled = CandidateCompiledDraft(
+        goal="Find Indian AI startups",
+        entity_type="company",
+        fields=[
+            CandidateFieldSpec(
+                key="name",
+                label="Name",
+                data_type="text",
+                required=True,
+            )
+        ],
+        ambiguities=[
+            Ambiguity(
+                code="AMB_BLOCKING",
+                message="Unresolved blocking problem",
+                severity=AmbiguitySeverity.BLOCKING,
+                blocking=True,
+            )
+        ],
+    )
+    envelope = CandidateCompilerEnvelope(
+        outcome_type="COMPILED",
+        requires_confirmation=True,
+        compiled=compiled,
+        clarification=None,
+    )
+    with pytest.raises(CompilerValidationError, match="unresolved BLOCKING ambiguities"):
+        validate_compilation_draft(envelope, dummy_provider_metadata)
+
+
+def test_envelope_plandag_injection_rejected(
+    sample_compiled_draft: CandidateCompiledDraft,
+    dummy_provider_metadata: ProviderMetadata,
+) -> None:
+    """PlanDAG injection on envelope, compiled draft, or clarification draft is strictly rejected."""
+    # 1. On envelope level
+    envelope_injected = CandidateCompilerEnvelope(
+        outcome_type="COMPILED",
+        requires_confirmation=True,
+        compiled=sample_compiled_draft,
+        plan_dag={"nodes": ["FETCH_HTTP"]},  # type: ignore[call-arg]
+    )
+    with pytest.raises(CompilerValidationError, match="PlanDAG or workflow operator injection"):
+        validate_compilation_draft(envelope_injected, dummy_provider_metadata)
+
+    # 2. Inside compiled draft
+    compiled_injected = sample_compiled_draft.model_copy(update={"operators": ["EXECUTE_PYTHON"]})
+    envelope_injected_2 = CandidateCompilerEnvelope(
+        outcome_type="COMPILED",
+        requires_confirmation=True,
+        compiled=compiled_injected,
+    )
+    with pytest.raises(CompilerValidationError, match="PlanDAG or workflow operator injection"):
+        validate_compilation_draft(envelope_injected_2, dummy_provider_metadata)

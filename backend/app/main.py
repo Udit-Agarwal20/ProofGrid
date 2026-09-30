@@ -4,12 +4,28 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, status
+from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.ai.exceptions import (
+    AIProviderAuthenticationError,
+    AIProviderBillingError,
+    AIProviderConfigurationError,
+    AIProviderError,
+    AIProviderMalformedOutputError,
+    AIProviderRateLimitError,
+    AIProviderTimeoutError,
+)
+from app.api.routes import router
+from app.application.requirement_compiler.errors import (
+    CompilerProviderError,
+    CompilerValidationError,
+)
 from app.core.config import get_settings
 from app.core.correlation import CorrelationIdMiddleware
+from app.core.errors import ProofGridError
 from app.core.logging import configure_logging, get_logger
 from app.db.engine import dispose_async_engine
 from app.db.health import check_database_health
@@ -41,6 +57,103 @@ app = FastAPI(
     version=settings.APP_VERSION,
     lifespan=lifespan,
 )
+
+app.include_router(router)
+
+
+@app.exception_handler(RequestValidationError)
+async def request_validation_error(request: Request, exc: RequestValidationError) -> JSONResponse:
+    # Pydantic's default errors include the submitted input. Never echo secrets or raw bodies.
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": {
+                "code": "REQUEST_INVALID",
+                "message": "Request does not match the API contract.",
+                "retryable": False,
+                "correlation_id": getattr(request.state, "correlation_id", None),
+                "fields": [{"location": list(e["loc"]), "type": e["type"]} for e in exc.errors()],
+            }
+        },
+    )
+
+
+@app.exception_handler(ProofGridError)
+async def product_error(request: Request, exc: ProofGridError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status,
+        content={
+            "error": {
+                "code": exc.code,
+                "message": exc.message,
+                "retryable": exc.retryable,
+                "correlation_id": getattr(request.state, "correlation_id", None),
+            }
+        },
+    )
+
+
+@app.exception_handler(CompilerValidationError)
+async def compiler_validation_error(request: Request, exc: CompilerValidationError) -> JSONResponse:
+    return JSONResponse(
+        status_code=422,
+        content={
+            "error": {
+                "correlation_id": getattr(request.state, "correlation_id", None),
+                "code": "COMPILER_VALIDATION",
+                "message": "The provider proposal failed deterministic validation.",
+                "retryable": True,
+            }
+        },
+    )
+
+
+@app.exception_handler(AIProviderError)
+async def ai_provider_error(request: Request, exc: AIProviderError) -> JSONResponse:
+    categories = {
+        AIProviderConfigurationError: ("PROVIDER_CONFIGURATION", False),
+        AIProviderAuthenticationError: ("PROVIDER_AUTHENTICATION", False),
+        AIProviderBillingError: ("PROVIDER_BILLING", False),
+        AIProviderRateLimitError: ("PROVIDER_RATE_LIMIT", True),
+        AIProviderTimeoutError: ("PROVIDER_TIMEOUT", True),
+        AIProviderMalformedOutputError: ("PROVIDER_MALFORMED_OUTPUT", True),
+    }
+    code, retryable = categories.get(type(exc), ("PROVIDER_UNAVAILABLE", True))
+    return JSONResponse(
+        status_code=503,
+        content={
+            "error": {
+                "correlation_id": getattr(request.state, "correlation_id", None),
+                "code": code,
+                "message": "The configured provider could not complete this request.",
+                "retryable": retryable,
+            }
+        },
+    )
+
+
+@app.exception_handler(CompilerProviderError)
+async def compiler_provider_error(request: Request, exc: CompilerProviderError) -> JSONResponse:
+    cause = exc.__cause__
+    return await ai_provider_error(
+        request, cause if isinstance(cause, AIProviderError) else AIProviderError()
+    )
+
+
+@app.exception_handler(Exception)
+async def internal_error(request: Request, exc: Exception) -> JSONResponse:
+    return JSONResponse(
+        status_code=500,
+        content={
+            "error": {
+                "correlation_id": getattr(request.state, "correlation_id", None),
+                "code": "INTERNAL_ERROR",
+                "message": "Request could not be completed.",
+                "retryable": False,
+            }
+        },
+    )
+
 
 # Correlation ID middleware
 app.add_middleware(CorrelationIdMiddleware)
@@ -106,8 +219,9 @@ async def health_ready() -> JSONResponse:
                 content=response_payload,
             )
     else:
-        # Offline / unconfigured environment retains deterministic Phase 1 compatibility
         response_payload["database"] = {"status": "unconfigured"}
+        response_payload["ready"] = False
+        return JSONResponse(status_code=503, content=response_payload)
 
     return JSONResponse(
         status_code=status.HTTP_200_OK,

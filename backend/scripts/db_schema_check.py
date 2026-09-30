@@ -7,7 +7,7 @@ NEVER prints credentials, passwords, or connection URLs.
 import asyncio
 import sys
 
-from sqlalchemy import inspect, text
+from sqlalchemy import text
 
 from app.core.config import get_settings
 from app.db.engine import create_engine_instance
@@ -93,7 +93,7 @@ async def main() -> int:
                     "GROUP BY constraint_type"
                 )
             )
-            constraint_counts = dict(res.fetchall())
+            constraint_counts: dict[str, int] = dict(res.fetchall())
             fk_count = constraint_counts.get("FOREIGN KEY", 0)
             uq_count = constraint_counts.get("UNIQUE", 0)
             ck_count = constraint_counts.get("CHECK", 0)

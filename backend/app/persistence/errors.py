@@ -82,7 +82,7 @@ def translate_db_error(exc: Exception) -> PersistenceError:
         match = re.search(r'constraint "([^"]+)"', msg)
         constraint = match.group(1) if match else None
         return PersistenceConflictError(
-            f"Unique constraint violation: {constraint or msg}",
+            f"Unique constraint violation: {constraint or 'unspecified'}",
             conflict_key=constraint,
             original_error=exc,
         )
@@ -91,7 +91,7 @@ def translate_db_error(exc: Exception) -> PersistenceError:
         match = re.search(r'constraint "([^"]+)"', msg)
         constraint = match.group(1) if match else None
         return PersistenceIntegrityError(
-            f"Foreign key constraint violation: {constraint or msg}",
+            f"Foreign key constraint violation: {constraint or 'unspecified'}",
             constraint_name=constraint,
             original_error=exc,
         )
@@ -100,9 +100,9 @@ def translate_db_error(exc: Exception) -> PersistenceError:
         match = re.search(r'constraint "([^"]+)"', msg)
         constraint = match.group(1) if match else None
         return PersistenceIntegrityError(
-            f"Check constraint violation: {constraint or msg}",
+            f"Check constraint violation: {constraint or 'unspecified'}",
             constraint_name=constraint,
             original_error=exc,
         )
 
-    return PersistenceError(f"Database operation failed: {msg}", original_error=exc)
+    return PersistenceError("Database operation failed.", original_error=exc)

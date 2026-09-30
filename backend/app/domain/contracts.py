@@ -5,13 +5,14 @@ RequirementSpec, TrustContract, PlanDAG, Claim, Entity, DatasetSchema.
 """
 
 import re
-from datetime import UTC, datetime
+from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.domain.clock import utc_now
 from app.domain.enums import (
     EvidenceStatus,
     EvidenceType,
@@ -128,6 +129,7 @@ class TrustContract(DomainBaseModel):
     )
     strict_required_fields: bool = Field(default=False)
     max_source_age_days: int | None = Field(default=None, ge=1)
+    max_search_queries: int = Field(default=5, ge=1, le=20)
     max_pages: int = Field(default=60, ge=1, le=500)
     max_browser_pages: int = Field(default=5, ge=0, le=50)
     max_llm_calls: int = Field(default=80, ge=1, le=500)
@@ -212,7 +214,7 @@ class Claim(DomainBaseModel):
     evidence: EvidenceAnchor
     extraction_method: str = "deterministic"
     validation_flags: list[str] = Field(default_factory=list)
-    observed_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    observed_at: datetime = Field(default_factory=utc_now)
 
 
 class Entity(DomainBaseModel):
@@ -223,7 +225,7 @@ class Entity(DomainBaseModel):
     entity_type: str = "company"
     canonical_data: dict[str, Any] = Field(default_factory=dict)
     current_status: TrustStatus = TrustStatus.SUPPORTED
-    created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    created_at: datetime = Field(default_factory=utc_now)
 
 
 class DatasetSchema(DomainBaseModel):

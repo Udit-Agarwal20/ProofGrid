@@ -1,0 +1,24 @@
+{
+  "notice": "Synthetic independent fixture report with distinct wording and source layout.",
+  "records": [
+    {
+      "company_name": "Veda AI Demo",
+      "website": "https://veda-demo.example",
+      "founders": [
+        "Ravi Demo"
+      ],
+      "headquarters": "Mumbai, India",
+      "industry": "AI",
+      "funding_round": "Seed",
+      "funding_amount": "$2 million",
+      "currency": "USD",
+      "investors": [
+        "Sample Capital"
+      ],
+      "funding_date": "2026-09-03",
+      "announced_date": "2026-09-03",
+      "source_url": "https://sample-report.example/veda"
+    }
+  ],
+  "report": "Veda AI Demo is a fictional Mumbai technology business. This offline evidence sample exists solely to test agreement, normalization and independent-source counting."
+}

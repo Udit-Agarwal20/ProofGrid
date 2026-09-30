@@ -6,6 +6,7 @@ Future service credentials remain optional placeholders.
 
 from functools import lru_cache
 from typing import Literal
+from uuid import UUID
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -95,32 +96,69 @@ class Settings(BaseSettings):
         return redact_database_url(target)
 
     # --------------------------------------------------------------------------
+    # AI & Requirement Compiler Provider Settings (Phase 3)
+    # --------------------------------------------------------------------------
+    AI_PROVIDER: Literal["fixture", "gemini", "groq"] = "fixture"
+    GEMINI_API_KEY: SecretStr | None = None
+    GEMINI_MODEL: str = "gemini-3.8-flash"
+    GEMINI_TIMEOUT_MS: int = Field(default=45000, ge=1000)
+
+    GROQ_API_KEY: SecretStr | None = None
+    GROQ_MODEL: str = "openai/gpt-oss-120b"
+    GROQ_TIMEOUT_MS: int = Field(default=45000, ge=1000)
+    GROQ_MAX_COMPLETION_TOKENS: int = Field(default=4096, ge=512, le=4096)
+
+    @property
+    def gemini_api_key_unmasked(self) -> str | None:
+        """Return raw unmasked GEMINI_API_KEY string if configured, otherwise None."""
+        if not self.GEMINI_API_KEY:
+            return None
+        return self.GEMINI_API_KEY.get_secret_value()
+
+    @property
+    def groq_api_key_unmasked(self) -> str | None:
+        """Return raw unmasked GROQ_API_KEY string if configured, otherwise None."""
+        if not self.GROQ_API_KEY:
+            return None
+        return self.GROQ_API_KEY.get_secret_value()
+
+    # --------------------------------------------------------------------------
     # Optional Placeholders for Future Phases
     # --------------------------------------------------------------------------
     RAW_EVIDENCE_BUCKET: str = "proofgrid-raw-evidence"
 
     LLM_PROVIDER: str = "openai"
-    LLM_API_KEY: str | None = None
+    LLM_API_KEY: SecretStr | None = None
     PLANNER_MODEL: str = "gpt-4o-2024-08-06"
     EXTRACTOR_MODEL: str = "gpt-4o-mini-2024-07-18"
 
-    SEARCH_PROVIDER: str = "tavily"
-    SEARCH_API_KEY: str | None = None
+    SEARCH_PROVIDER: Literal["fixture", "brave"] = "fixture"
+    SEARCH_API_KEY: SecretStr | None = None
 
     QDRANT_URL: str | None = None
-    QDRANT_API_KEY: str | None = None
+    QDRANT_API_KEY: SecretStr | None = None
     QDRANT_COLLECTION: str = "proofgrid_entities"
     EMBEDDING_MODEL: str = "text-embedding-3-small"
 
-    SENTRY_DSN: str | None = None
+    SENTRY_DSN: SecretStr | None = None
     OTEL_EXPORTER_OTLP_ENDPOINT: str | None = None
 
+    DEMO_PROJECT_ID: UUID = UUID("a0000000-0000-0000-0000-000000000001")
+    INTERNAL_WORKER_SECRET: SecretStr | None = None
+    API_AUTH_TOKEN: SecretStr | None = None
+    ALLOWED_SOURCE_DOMAINS: list[str] = Field(default_factory=list)
+    FIRST_PARTY_DOMAINS: list[str] = Field(default_factory=list)
+    MAX_RESPONSE_BYTES: int = Field(default=5_000_000, ge=1024, le=5_000_000)
+    LEASE_SECONDS: int = Field(default=60, ge=15, le=300)
+    RAW_RETENTION_DAYS: int = Field(default=30, ge=1)
+    EXPORT_RETENTION_DAYS: int = Field(default=7, ge=1)
     AUTH_ENABLED: bool = False
     ENABLE_BROWSER: bool = False
     ENABLE_QDRANT: bool = False
     ENABLE_PATHWAY: bool = False
     ENABLE_N8N_WEBHOOKS: bool = False
     STRICT_EVIDENCE: bool = True
+    FIXTURE_SET: Literal["synthetic", "captured"] = "synthetic"
     ACQUISITION_MODE: Literal["LIVE", "FIXTURE"] = "LIVE"
     MAX_CONCURRENT_RUNS: int = Field(default=3, ge=1)
     MAX_HTTP_CONCURRENCY: int = Field(default=8, ge=1)

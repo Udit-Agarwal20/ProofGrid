@@ -833,12 +833,19 @@ async def test_neon_dataset_repository_versioning_and_canonical_records(
         )
         await uow.session.flush()
 
+        run2 = uow.workflows.add_workflow_run(
+            WorkflowRun(
+                project_id=proj.id, workflow_version_id=wv.id, status="RUNNING", run_mode="LIVE"
+            )
+        )
+        await uow.session.flush()
+
         v2 = uow.datasets.add_dataset_version(
             DatasetVersion(
                 project_id=proj.id,
                 dataset_id=ds.id,
                 dataset_schema_id=schema.id,
-                workflow_run_id=run.id,
+                workflow_run_id=run2.id,
                 version_number=2,
                 record_count=10,
                 status="FINALIZED",

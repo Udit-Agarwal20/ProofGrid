@@ -90,6 +90,7 @@ class DatasetVersion(Base):
         UniqueConstraint(
             "dataset_id", "version_number", name="uq_dataset_versions_dataset_version"
         ),
+        UniqueConstraint("workflow_run_id", name="uq_dataset_versions_run"),
         CheckConstraint("version_number > 0", name="version_number"),
         CheckConstraint("record_count >= 0", name="record_count"),
         CheckConstraint(

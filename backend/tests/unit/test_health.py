@@ -70,11 +70,11 @@ def test_health_ready_when_db_unhealthy() -> None:
 
 
 def test_health_ready_when_db_unconfigured() -> None:
-    """Verify /health/ready maintains Phase 1 compatibility when DATABASE_URL is not set."""
+    """Readiness fails closed when the authoritative database is absent."""
     with patch("app.main.settings.DATABASE_URL", None):
         response = client.get("/health/ready")
-        assert response.status_code == 200
+        assert response.status_code == 503
         data = response.json()
         assert data["status"] == "ok"
-        assert data["ready"] is True
+        assert data["ready"] is False
         assert data["database"]["status"] == "unconfigured"

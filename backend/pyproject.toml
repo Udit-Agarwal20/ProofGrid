@@ -13,6 +13,12 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.36",
     "psycopg[binary]>=3.2.0",
     "alembic>=1.14.0",
+    "httpx>=0.27.0",
+    "beautifulsoup4>=4.12.0",
+    "rapidfuzz>=3.10.0",
+    "tldextract>=5.1.0",
+    "google-genai>=2.25.0,<3.0.0",
+    "groq>=1.7.0,<2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -67,7 +73,8 @@ testpaths = ["tests"]
 pythonpath = ["."]
 python_files = ["test_*.py"]
 asyncio_mode = "auto"
-addopts = "-v --tb=short -m 'not integration'"
+addopts = "-v --tb=short -m 'not integration and not llm_live'"
 markers = [
     "integration: tests requiring live external services like Neon database",
+    "llm_live: tests requiring real external LLM API calls (opt-in only)",
 ]

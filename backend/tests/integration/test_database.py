@@ -54,9 +54,10 @@ from app.db.session import get_session_factory
 # Mark all tests in this module as integration tests
 pytestmark = pytest.mark.integration
 
-PHASE_2B_HEAD_REVISION = "9727a73ca3e4"
+PHASE_2B_HEAD_REVISION = "b73a8d401e20"
 
 EXPECTED_BUSINESS_TABLES = {
+    "exports",
     "projects",
     "requirements",
     "dataset_schemas",
@@ -225,7 +226,7 @@ async def test_neon_table_inventory(settings: Settings) -> None:
             assert tables == expected_tables, (
                 f"Table inventory mismatch. Diff: {tables ^ expected_tables}"
             )
-            assert len(tables) == 22
+            assert len(tables) == 23
     finally:
         await engine.dispose()
 

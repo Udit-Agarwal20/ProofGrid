@@ -10,6 +10,22 @@ jobs:
   backend:
     name: Backend Verification
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: proofgrid
+          POSTGRES_PASSWORD: proofgrid_ci
+          POSTGRES_DB: proofgrid
+        ports:
+          - 5432:5432
+        options: --health-cmd "pg_isready -U proofgrid" --health-interval 2s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://proofgrid:proofgrid_ci@127.0.0.1:5432/proofgrid
+      DATABASE_DIRECT_URL: postgresql://proofgrid:proofgrid_ci@127.0.0.1:5432/proofgrid
+      TEST_DATABASE_URL: postgresql://proofgrid:proofgrid_ci@127.0.0.1:5432/proofgrid
+      AI_PROVIDER: fixture
+      ACQUISITION_MODE: FIXTURE
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -27,8 +43,7 @@ jobs:
       - name: Install backend dependencies
         run: |
           cd backend
-          uv venv
-          uv pip install -e ".[dev]"
+          uv sync --frozen --extra dev
 
       - name: Backend Lint (Ruff)
         run: |
@@ -45,6 +60,12 @@ jobs:
         run: |
           cd backend
           .venv/bin/pytest
+
+      - name: PostgreSQL and offline fixture E2E
+        run: |
+          cd backend
+          .venv/bin/alembic upgrade head
+          .venv/bin/pytest -m integration
 
   frontend:
     name: Frontend Verification

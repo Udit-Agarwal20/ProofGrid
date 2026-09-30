@@ -5,6 +5,7 @@ No heavy external observability platforms. Clean, standard library logging inter
 
 import json
 import logging
+import re
 import sys
 from contextvars import ContextVar
 from datetime import UTC, datetime
@@ -22,6 +23,27 @@ def get_correlation_id() -> str | None:
 def set_correlation_id(correlation_id: str | None) -> None:
     """Set the active correlation ID for the current context."""
     correlation_id_ctx.set(correlation_id)
+
+
+SENSITIVE = re.compile(
+    r"authorization|cookie|password|secret|api.?key|raw.?body|document.?content", re.I
+)
+
+
+def redact(value: Any, key: str = "") -> Any:
+    if SENSITIVE.search(key):
+        return "[REDACTED]"
+    if isinstance(value, dict):
+        return {k: redact(v, str(k)) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [redact(v) for v in value]
+    if isinstance(value, str):
+        value = re.sub(r"(?i)(bearer\s+)[^\s,;]+", r"\1[REDACTED]", value)
+        value = re.sub(r"(://)[^/@\s]+:[^/@\s]+@", r"\1[REDACTED]@", value)
+        value = re.sub(
+            r"(?i)((?:api[_-]?key|password|secret|token)=)[^&\s]+", r"\1[REDACTED]", value
+        )
+    return value
 
 
 class StructuredJsonFormatter(logging.Formatter):
@@ -71,9 +93,9 @@ class StructuredJsonFormatter(logging.Formatter):
                 log_data[key] = value
 
         if record.exc_info:
-            log_data["exception"] = self.formatException(record.exc_info)
+            log_data["exception_type"] = type(record.exc_info[1]).__name__
 
-        return json.dumps(log_data)
+        return json.dumps(redact(log_data), default=str)
 
 
 def configure_logging(service_name: str = "proofgrid-api", log_level: str = "INFO") -> None:
@@ -81,6 +103,8 @@ def configure_logging(service_name: str = "proofgrid-api", log_level: str = "INF
     root_logger = logging.getLogger()
     numeric_level = getattr(logging, log_level.upper(), logging.INFO)
     root_logger.setLevel(numeric_level)
+    for name in ("httpx", "httpcore", "groq", "google", "sqlalchemy.engine"):
+        logging.getLogger(name).setLevel(logging.WARNING)
 
     # Remove existing handlers to avoid duplicates
     for handler in list(root_logger.handlers):

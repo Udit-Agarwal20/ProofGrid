@@ -216,3 +216,59 @@
   - Runtime code must honor transaction-pooling constraints (e.g. no session-level advisory variables or persistent `SET search_path` across transactions).
   - Migrations must strictly execute over `DATABASE_DIRECT_URL` to avoid PgBouncer DDL limitations.
 - **Status**: **Accepted**.
+
+---
+
+### ADR-020: Adopt Google Gemini Developer API for Live Requirement Compiler Structured Generation
+- **Decision**: Adopt the Google Gemini Developer API via the official `google-genai` Python SDK as the primary live `StructuredGenerationProvider` implementation for the ProofGrid Requirement Compiler, with `gemini-3.8-flash` as the initial configuration-driven model.
+- **Reason**:
+  - High performance and cost-efficiency for structured JSON synthesis with strict schema adherence.
+  - Native support for schema-enforced structured outputs (`response_mime_type="application/json"`).
+  - Low latency for interactive requirement negotiation (<2s typical response time).
+  - Clean asynchronous SDK lifecycle (`client.aio`) without requiring third-party wrappers or thread executors.
+- **Alternatives considered**:
+  - *OpenAI Structured Outputs (GPT-4o)*: Excellent structured output support, but requires higher per-token costs for high-iteration interactive sessions.
+  - *Anthropic Claude 3.5 Sonnet*: Strong reasoning, but native JSON schema enforcement requires tool use / function calling mechanisms rather than native constrained decoding.
+  - *Local LLMs (Ollama / vLLM)*: Zero cloud dependency, but imposes severe local hardware requirements (Apple Silicon / NVIDIA GPU) that impair team portability.
+- **Consequences**:
+  - `FixtureProvider` remains the canonical, default offline provider for unit tests, CI pipelines, and environments without an API key.
+  - The Requirement Compiler application layer remains strictly vendor-independent, interacting only through the `StructuredGenerationProvider` protocol.
+  - Schema compatibility: Gemini Developer API structured output requires a local schema transformation to remove unsupported keywords (`additionalProperties`, `title`, `$schema`) while preserving all required properties, types, and enums.
+  - ProofGrid deterministic validation remains the final, authoritative gate; model outputs are never trusted without independent Pydantic and domain validation.
+  - Strict tool isolation: Zero external tools, zero Google Search grounding, and zero code execution are permitted during requirement compilation.
+  - The model name is strictly configuration-driven (`GEMINI_MODEL`, defaulting to `gemini-3.8-flash`) and replaceable without modifying compiler code.
+  - Additional providers (e.g. OpenAI, Anthropic) can be added in future phases without altering domain or compiler contracts.
+- **Privacy & Compliance Note**:
+  - Gemini Developer API data handling is suitable for non-sensitive hackathon development prompts, but private or enterprise production workloads require a deliberate provider/privacy review before deployment.
+- **Status**: **Accepted** (Live operational testing experienced upstream HTTP 503 capacity errors; preserved alongside alternate live providers).
+
+---
+
+### ADR-021: Groq Cloud Provider Integration for Structured Generation (openai/gpt-oss-120b)
+- **Decision**: Add Groq Cloud (`groq>=1.7.0,<2.0.0`) via `AsyncGroq` as an explicit, production-grade implementation of `StructuredGenerationProvider`, using `openai/gpt-oss-120b` with mandatory `strict: True` JSON Schema constrained decoding. Provider selection is explicit (`AI_PROVIDER=groq`), with zero automatic runtime fallback.
+- **Reason**:
+  - Live Gemini acceptance was temporarily blocked by repeated upstream capacity constraints (HTTP 503 `UNAVAILABLE`).
+  - Groq Cloud delivers ultra-fast token generation (~2-3s wall-clock latency) and native strict JSON Schema constrained decoding.
+  - Maintains strict vendor independence: `GroqProvider` implements the identical `StructuredGenerationProvider` contract as `FixtureProvider` and `GeminiProvider`.
+  - Offline isolation is preserved: `AI_PROVIDER=fixture` remains the default committed configuration; all CI test suites make zero network calls.
+- **Alternatives considered**:
+  - *Runtime automatic fallback (Gemini -> Groq)*: Rejected. Fallback chains introduce nondeterministic behavior and hide billing/capacity failures across providers.
+  - *OpenAI SDK with custom base_url*: Rejected. Official `groq` SDK is preferred for clean error handling, bounded async lifecycle, and accurate usage metrics.
+- **Consequences**:
+  - `transform_schema_for_groq_strict` applies a Groq-local JSON Schema adaptation (enforces `additionalProperties: false`, lists all properties in `required`, strips unsupported regex lookarounds, and explicitly types untyped leaf nodes).
+  - Pydantic models in ProofGrid are NOT duplicated or weakened.
+  - Architecture remains: Groq strict decoding -> Pydantic validation -> ProofGrid deterministic validation.
+  - Zero tools, zero PlanDAG, zero acquisition execution.
+- **Status**: **Accepted**.
+
+### ADR-022: Durable bounded execution and reproducible evidence snapshots
+- **Decision**: Keep FastAPI plus a separate worker and use PostgreSQL row locks (`SKIP LOCKED`), attempt-fenced leases, atomic operator writes and a transactional outbox. Lock runs before steps everywhere. No distributed broker was introduced.
+- **Reason**: Three concurrent demo runs do not justify additional coordination infrastructure. Retries must not duplicate facts or allow expired workers to publish results.
+- **Consequences**: The queue serializes short state changes per run, while acquisition remains outside transactions. Schema/trust/plan snapshots and run idempotency keys are durable. Dataset version allocation is protected by transaction-scoped advisory locks. Claims reject UPDATE/DELETE in the database. Review selections apply to later snapshots; historical displayed values stay unchanged.
+- **Status**: Accepted; database concurrency/recovery and fixture E2E verified.
+
+### ADR-023: Honest fixture provenance and constrained live acquisition
+- **Decision**: Ship two raw-source fixture sets: explicitly synthetic conflict scenarios and actual captured historical public company announcements. Both traverse the same worker, extraction, verification, normalization, identity, trust and materialization stages.
+- **Reason**: A reliable conflict demo must not misrepresent fabricated assertions as live facts. A publication timestamp must not silently become a funding date.
+- **Consequences**: Every raw observation records acquisition method, capture time and hash. Runtime HTTP validates DNS, pins public IPs, preserves TLS SNI, checks every redirect and robots policy, and bounds response size/time. Browser collection and optional cloud projections remain disabled extensions. Gemini uses `response_json_schema` to avoid SDK conversion errors for boolean constants; local Pydantic/domain validation remains authoritative.
+- **Status**: Accepted; two public captures and offline captured extraction verified. Groq live smoke passed; Gemini live acceptance remains affected by upstream HTTP 503.

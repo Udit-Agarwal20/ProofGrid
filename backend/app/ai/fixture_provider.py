@@ -5,17 +5,22 @@ Zero network calls, zero vendor SDK dependencies.
 
 from __future__ import annotations
 
+import calendar
+import re
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, TypeVar, cast
 
 from app.ai.contracts import ProviderMetadata, StructuredGenerationRequest
 from app.ai.exceptions import AIProviderConfigurationError, AIProviderError, AIProviderTimeoutError
+from app.ai.fixture_catalog import catalog_draft
 from app.application.requirement_compiler.models import (
     Ambiguity,
     AmbiguitySeverity,
     Assumption,
+    CandidateClarificationDraft,
     CandidateCompilationDraft,
+    CandidateCompilerEnvelope,
     CandidateFieldSpec,
     CandidateFilterSpec,
     CandidateTrustPreferences,
@@ -39,6 +44,10 @@ class FixtureProvider:
             return str(scenario_meta)
 
         prompt_lower = request.user_prompt.lower()
+        if "founded in 2026" in prompt_lower and "ipo" in prompt_lower and "2015" in prompt_lower:
+            return "blocking_contradiction"
+        if catalog_draft(request.user_prompt) is not None:
+            return "generalization"
         if "best ones in india" in prompt_lower or (
             "best ones" in prompt_lower and "india" in prompt_lower
         ):
@@ -88,16 +97,74 @@ class FixtureProvider:
             raise AIProviderError("Simulation: provider connection failed with 503")
 
         draft = self._build_scenario_draft(scenario, request)
-        if not isinstance(draft, output_schema):
-            # Attempt parsing through output_schema if a dict or compatible model
-            if isinstance(draft, dict) and hasattr(output_schema, "model_validate"):
-                validated_model: T = cast(Any, output_schema).model_validate(draft)
-                return validated_model, metadata
-            raise AIProviderConfigurationError(
-                f"Fixture scenario '{scenario}' returned {type(draft)}, expected {output_schema}."
+        if scenario == "golden_indian_ai_funding" and "12 months" in request.user_prompt.lower():
+            extra_fields = [
+                ("website", "url"),
+                ("founders", "entity_list"),
+                ("headquarters", "location"),
+                ("industry", "text"),
+            ]
+            for key, kind in extra_fields:
+                if key not in {f.key for f in draft.fields}:
+                    draft.fields.append(
+                        CandidateFieldSpec(
+                            key=key,
+                            label=key.replace("_", " ").title(),
+                            data_type=kind,
+                            required=key != "industry",
+                            origin="ai_inferred" if key == "industry" else "user",
+                        )
+                    )
+            draft.filters.append(
+                CandidateFilterSpec(field_key="industry", operator="eq", value="AI")
             )
+            if "$1m" in request.user_prompt.lower() or "$1 million" in request.user_prompt.lower():
+                draft.filters.append(
+                    CandidateFilterSpec(
+                        field_key="funding_amount",
+                        operator="gt",
+                        value={"amount": "1000000", "currency": "USD"},
+                    )
+                )
+        if isinstance(draft, output_schema):
+            return draft, metadata
 
-        return draft, metadata
+        if output_schema is CandidateCompilerEnvelope:
+            has_blocking = any(
+                a.blocking or (a.severity == AmbiguitySeverity.BLOCKING) for a in draft.ambiguities
+            )
+            if has_blocking:
+                envelope = CandidateCompilerEnvelope(
+                    outcome_type="NEEDS_CLARIFICATION",
+                    requires_confirmation=True,
+                    compiled=None,
+                    clarification=CandidateClarificationDraft(
+                        ambiguities=draft.ambiguities,
+                        assumptions=draft.assumptions,
+                        clarification_questions=draft.clarification_questions,
+                        detected_entity_type=draft.entity_type or None,
+                        detected_geography=draft.geography,
+                        detected_time_window=draft.time_window,
+                        candidate_fields=[f.key for f in draft.fields if f.key],
+                    ),
+                )
+            else:
+                envelope = CandidateCompilerEnvelope(
+                    outcome_type="COMPILED",
+                    requires_confirmation=True,
+                    compiled=draft,
+                    clarification=None,
+                )
+            return cast(T, envelope), metadata
+
+        # Attempt parsing through output_schema if a dict or compatible model
+        if isinstance(draft, dict) and hasattr(output_schema, "model_validate"):
+            validated_model: T = cast(Any, output_schema).model_validate(draft)
+            return validated_model, metadata
+
+        raise AIProviderConfigurationError(
+            f"Fixture scenario '{scenario}' returned {type(draft)}, expected {output_schema}."
+        )
 
     def _build_scenario_draft(
         self,
@@ -105,6 +172,10 @@ class FixtureProvider:
         request: StructuredGenerationRequest,
     ) -> CandidateCompilationDraft:
         """Build the CandidateCompilationDraft for a specified scenario."""
+        if scenario == "generalization":
+            result = catalog_draft(request.user_prompt)
+            assert result is not None
+            return result
         if scenario == "golden_indian_ai_funding":
             ref_str = request.metadata.get("reference_date")
             if ref_str:
@@ -114,15 +185,17 @@ class FixtureProvider:
 
             # Deterministic trailing 18 months relative to reference_date
             end_date = ref_dt.astimezone(UTC).strftime("%Y-%m-%d")
-            total_months = ref_dt.year * 12 + (ref_dt.month - 1) - 18
+            match = re.search(r"last (\d+) months", request.user_prompt, re.I)
+            months = int(match[1]) if match else 18
+            total_months = ref_dt.year * 12 + (ref_dt.month - 1) - months
             start_year = total_months // 12
             start_month = (total_months % 12) + 1
-            start_day = min(ref_dt.day, 28)
+            start_day = min(ref_dt.day, calendar.monthrange(start_year, start_month)[1])
             start_date = f"{start_year:04d}-{start_month:02d}-{start_day:02d}"
 
             return CandidateCompilationDraft(
                 entity_type="company",
-                goal="Find Indian AI startups that raised funding in the last 18 months",
+                goal=f"Find Indian AI startups that raised funding in the last {months} months",
                 fields=[
                     CandidateFieldSpec(
                         key="company_name",
@@ -210,7 +283,7 @@ class FixtureProvider:
                     Ambiguity(
                         code="RELATIVE_TIME_WINDOW",
                         field_path="time_window",
-                        message="'last 18 months' is relative to execution date.",
+                        message=f"Last {months} months is relative to the supplied reference date.",
                         severity=AmbiguitySeverity.INFO,
                         blocking=False,
                         possible_interpretations=[
@@ -465,7 +538,7 @@ class FixtureProvider:
                         required=True,
                     )
                 ],
-                plan_dag={"nodes": [{"id": "fetch_1", "operator": "FETCH_HTTP"}]},
+                **cast(Any, {"plan_dag": {"nodes": [{"id": "fetch_1", "operator": "FETCH_HTTP"}]}}),
             )
 
         if scenario == "blocking_user_ambiguity_missing_entity":
