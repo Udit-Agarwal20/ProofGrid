@@ -1,0 +1,5 @@
+# Frontend source overrides the repository's Python lib/ exclusion.
+!lib/
+!lib/**
+playwright-report/
+test-results/
