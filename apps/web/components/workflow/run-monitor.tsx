@@ -117,8 +117,11 @@ export function RunMonitor({ id }: { id: string }) {
     if (!versionId) return;
     const controller = new AbortController();
     setLookupError(undefined);
-    // The current run projection exposes its output version, not its dataset ID.
-    // Resolve that association through authoritative, paginated dataset/version APIs.
+    if (typeof run?.metrics.dataset_id === "string") {
+      setDataset(run.metrics.dataset_id);
+      return;
+    }
+    // Fall back to resolving that association through paginated dataset/version APIs.
     void (async () => {
       const datasets = await allPages<Dataset>(
         "/v1/datasets",
